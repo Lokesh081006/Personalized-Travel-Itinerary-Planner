@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +60,14 @@ async def get_trip(trip_id: str, request: Request):
 @app.post("/api/trips/generate", response_model=Trip, status_code=status.HTTP_201_CREATED)
 async def generate_trip(payload: GenerateTripRequest, request: Request):
     generated = await request.app.state.travel_agent.plan_trip(payload)
+    # Local models occasionally invent impossible calendar strings such as
+    # 2026-10-32. The requested range is authoritative, so day numbering and
+    # dates are normalized before persistence and delivery to the browser.
+    maximum_days = (payload.end_date - payload.start_date).days + 1
+    generated.itinerary = generated.itinerary[:maximum_days]
+    for index, itinerary_day in enumerate(generated.itinerary):
+        itinerary_day.day = index + 1
+        itinerary_day.date = (payload.start_date + timedelta(days=index)).isoformat()
     trip = Trip(
         **payload.model_dump(mode="json"),
         country=generated.country,
@@ -84,6 +93,8 @@ async def regenerate_day(trip_id: str, day_number: int, request: Request):
     if day_number < 1 or day_number > len(trip.itinerary):
         raise HTTPException(status_code=404, detail="Day not found")
     new_day = await request.app.state.travel_agent.revise_day(trip, day_number)
+    new_day.day = day_number
+    new_day.date = trip.itinerary[day_number - 1].date
     trip.itinerary[day_number - 1] = new_day
     trip.total_estimated_cost = sum(day.daily_cost for day in trip.itinerary)
     return await storage(request).save(trip)

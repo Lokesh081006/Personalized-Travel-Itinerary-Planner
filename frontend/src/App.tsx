@@ -80,7 +80,9 @@ const emptyForm: GenerateTripInput = {
 
 function formatDate(date: string, options?: Intl.DateTimeFormatOptions) {
   if (!date) return 'Choose date'
-  return new Intl.DateTimeFormat('en-US', options || { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`))
+  const parsed = new Date(`${date}T12:00:00`)
+  if (Number.isNaN(parsed.getTime())) return 'Date unavailable'
+  return new Intl.DateTimeFormat('en-US', options || { month: 'short', day: 'numeric' }).format(parsed)
 }
 
 function App() {

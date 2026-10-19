@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3,
-  Compass, Edit3, Heart, Hotel, LayoutDashboard, LoaderCircle, MapPin,
+  BrainCircuit, CheckCircle2, Compass, Edit3, Heart, Hotel, LayoutDashboard, LoaderCircle, MapPin,
   Menu, MoreHorizontal, Navigation, Plus, RefreshCw, Search, Settings,
-  Sparkles, Trash2, Users, Utensils, WandSparkles, X,
+  Sparkles, Trash2, Users, Utensils, WandSparkles, X, Route, Plane,
 } from 'lucide-react'
 import { api } from './api'
 import type { GenerateTripInput, ItineraryDay, Trip } from './types'
@@ -17,7 +17,20 @@ const categories: Record<string, { icon: typeof Compass; tone: string }> = {
   adventure: { icon: Navigation, tone: 'green' },
   relaxation: { icon: Heart, tone: 'rose' },
   transport: { icon: Navigation, tone: 'slate' },
+  accommodation: { icon: Hotel, tone: 'blue' },
 }
+
+const cleanText = (value: string) => value
+  .replace(/\*\*(.*?)\*\*/g, '$1')
+  .replace(/__(.*?)__/g, '$1')
+  .replace(/`(.*?)`/g, '$1')
+  .replace(/^[-•]\s*/, '')
+  .trim()
+
+const categoryLabel = (value: string) => value
+  .split(/[|,/]/)[0]
+  .replace(/[_-]/g, ' ')
+  .replace(/\b\w/g, (letter) => letter.toUpperCase())
 
 const demoTrip: Trip = {
   id: 'demo-kyoto', destination: 'Kyoto', country: 'Japan', start_date: '2026-11-12', end_date: '2026-11-16',
@@ -62,6 +75,7 @@ function App() {
   const [error, setError] = useState('')
   const [sidebar, setSidebar] = useState(false)
   const [toast, setToast] = useState('')
+  const [generationDestination, setGenerationDestination] = useState('')
 
   useEffect(() => {
     api.listTrips().then((saved) => saved.length && setTrips(saved)).catch(() => undefined)
@@ -72,7 +86,7 @@ function App() {
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2600) }
 
   const generate = async (input: GenerateTripInput) => {
-    setLoading(true); setError('')
+    setGenerationDestination(input.destination); setLoading(true); setError('')
     try {
       const trip = await api.generateTrip(input)
       setTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)])
@@ -96,6 +110,7 @@ function App() {
         {view === 'builder' && <TripBuilder onGenerate={generate} loading={loading} error={error} back={() => navigate('dashboard')} />}
         {view === 'trip' && <TripView trip={selected} save={saveTrip} notify={notify} back={() => navigate('dashboard')} />}
       </main>
+      {loading && <GenerationOverlay destination={generationDestination} />}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
   )
@@ -125,6 +140,40 @@ function Sidebar({ view, navigate, open, close }: { view: View; navigate: (v: Vi
 
 function MobileTopbar({ onMenu, onCreate }: { onMenu: () => void; onCreate: () => void }) {
   return <header className="mobile-top"><button onClick={onMenu}><Menu /></button><div className="brand"><span className="brand-mark"><Compass size={19} /></span>roamly</div><button onClick={onCreate}><Plus /></button></header>
+}
+
+function GenerationOverlay({ destination }: { destination: string }) {
+  const stages = [
+    { title: 'Understanding your travel style', detail: 'Reading your pace, interests, budget, and stay preferences.', icon: BrainCircuit },
+    { title: `Exploring ${destination || 'your destination'}`, detail: 'Finding neighborhoods, local highlights, and memorable places.', icon: Compass },
+    { title: 'Designing each day', detail: 'Balancing activities, meals, rest, and realistic travel time.', icon: CalendarDays },
+    { title: 'Optimizing the route', detail: 'Grouping nearby stops to keep your days smooth and unhurried.', icon: Route },
+    { title: 'Adding the finishing touches', detail: 'Checking costs and shaping your itinerary into a clear plan.', icon: Sparkles },
+  ]
+  const [stage, setStage] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setStage((current) => Math.min(current + 1, stages.length - 1)), 5200)
+    return () => window.clearInterval(timer)
+  }, [stages.length])
+
+  const ActiveIcon = stages[stage].icon
+  return <div className="generation-overlay" role="status" aria-live="polite">
+    <div className="generation-aurora one"/><div className="generation-aurora two"/>
+    <div className="generation-modal">
+      <div className="generation-orbit"><span/><span/><span/><div><ActiveIcon/></div></div>
+      <span className="generation-kicker"><Sparkles/> ROAMLY AI IS PLANNING</span>
+      <h2>{stages[stage].title}<span className="thinking-dots"><i/><i/><i/></span></h2>
+      <p>{stages[stage].detail}</p>
+      <div className="generation-progress"><span style={{ width: `${18 + stage * 20}%` }}/></div>
+      <div className="generation-steps">
+        {stages.map((item, index) => <div key={item.title} className={index < stage ? 'done' : index === stage ? 'active' : ''}>
+          <span>{index < stage ? <Check/> : index + 1}</span><small>{item.title.split(' ').slice(0, 2).join(' ')}</small>
+        </div>)}
+      </div>
+      <div className="generation-tip"><Plane/><span><strong>Good trips take a moment.</strong> Your local AI is building a detailed plan—please keep this window open.</span></div>
+    </div>
+  </div>
 }
 
 function Dashboard({ trips, openTrip, create }: { trips: Trip[]; openTrip: (t: Trip) => void; create: () => void }) {
@@ -199,7 +248,9 @@ function TripView({ trip, save, notify, back }: { trip: Trip; save: (t: Trip) =>
   const [activeDay, setActiveDay] = useState(1)
   const [regenerating, setRegenerating] = useState<number | null>(null)
   const day = trip.itinerary.find((item) => item.day === activeDay) || trip.itinerary[0]
+  const dayIndex = trip.itinerary.findIndex((item) => item.day === day?.day)
   const totalActivities = useMemo(() => trip.itinerary.reduce((sum, item) => sum + item.activities.length, 0), [trip])
+  const dayMinutes = day?.activities.reduce((sum, item) => sum + item.duration_minutes, 0) || 0
   const regenerate = async () => {
     if (!day) return
     setRegenerating(day.day)
@@ -210,20 +261,26 @@ function TripView({ trip, save, notify, back }: { trip: Trip; save: (t: Trip) =>
     const itinerary = trip.itinerary.map((item) => item.day === day.day ? { ...item, activities: item.activities.filter((_, i) => i !== index) } : item)
     save({ ...trip, itinerary })
   }
+  const moveDay = (offset: number) => {
+    const target = trip.itinerary[dayIndex + offset]
+    if (target) { setActiveDay(target.day); window.scrollTo({ top: 300, behavior: 'smooth' }) }
+  }
   return <div className="trip-view">
-    <header className="trip-banner"><div className="trip-banner-art"><span className="banner-sun"/><span className="banner-mountain one"/><span className="banner-mountain two"/></div><div className="trip-banner-content"><button className="back-link light" onClick={back}><ArrowLeft/>All trips</button><span className="status-pill"><i/>UPCOMING</span><h1>{trip.destination}</h1><p>{trip.country} · {formatDate(trip.start_date, { month: 'long', day: 'numeric' })} – {formatDate(trip.end_date, { month: 'long', day: 'numeric', year: 'numeric' })}</p><div className="trip-banner-facts"><span><CalendarDays/> {trip.itinerary.length} days</span><span><Users/> {trip.travelers} travelers</span><span><CircleDollarSign/> {trip.currency} {trip.total_estimated_cost.toLocaleString()}</span></div></div><button className="banner-edit" onClick={() => notify('Trip details are ready to edit')}><Edit3/>Edit trip</button></header>
+    <header className="trip-banner"><div className="trip-banner-art"><span className="banner-grid"/><span className="banner-sun"/><span className="banner-mountain one"/><span className="banner-mountain two"/><span className="banner-route"><i/><i/><i/></span></div><div className="trip-banner-content"><button className="back-link light" onClick={back}><ArrowLeft/>All trips</button><span className="status-pill"><i/>READY TO EXPLORE</span><h1>{trip.destination}</h1><p>{trip.country} <b>·</b> {formatDate(trip.start_date, { month: 'long', day: 'numeric' })} – {formatDate(trip.end_date, { month: 'long', day: 'numeric', year: 'numeric' })}</p><div className="trip-banner-facts"><span><CalendarDays/> {trip.itinerary.length} days</span><span><Users/> {trip.travelers} travelers</span><span><CircleDollarSign/> {trip.currency} {trip.total_estimated_cost.toLocaleString()}</span><span><Sparkles/> AI crafted</span></div></div><button className="banner-edit" onClick={() => notify('Trip details are ready to edit')}><Edit3/>Edit trip</button></header>
     <div className="trip-content">
-      <div className="trip-overview"><div><span className="eyebrow"><Sparkles size={13}/> YOUR AI-CRAFTED JOURNEY</span><h2>A thoughtful few days in {trip.destination}.</h2><p>{trip.summary}</p></div><div className="overview-stats"><span><strong>{totalActivities}</strong>curated stops</span><span><strong>{trip.interests.length}</strong>interests woven in</span><span><strong>{trip.currency} {trip.total_estimated_cost.toLocaleString()}</strong>estimated total</span></div></div>
-      <div className="day-tabs" role="tablist">{trip.itinerary.map((item) => <button role="tab" aria-selected={activeDay === item.day} className={activeDay === item.day ? 'active' : ''} onClick={() => setActiveDay(item.day)} key={item.day}><small>DAY {item.day}</small><strong>{formatDate(item.date, { month: 'short', day: 'numeric' })}</strong></button>)}</div>
-      {day && <section className="day-plan"><header className="day-plan-head"><div><span>DAY {day.day} · {formatDate(day.date, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</span><h2>{day.title}</h2><p>{day.summary}</p></div><button className="subtle-btn" onClick={regenerate} disabled={regenerating === day.day}><RefreshCw className={regenerating ? 'spin' : ''}/>Regenerate day</button></header>
+      <div className="trip-overview"><div><span className="eyebrow"><Sparkles size={13}/> YOUR AI-CRAFTED JOURNEY</span><h2>{trip.itinerary.length > 1 ? `${trip.itinerary.length} thoughtful days` : 'One thoughtful day'} in {trip.destination}.</h2><p>{cleanText(trip.summary)}</p><div className="overview-tags">{trip.interests.map((interest) => <span key={interest}>{interest}</span>)}</div></div><div className="overview-stats"><span><strong>{totalActivities}</strong>curated stops</span><span><strong>{trip.interests.length}</strong>interests woven in</span><span><strong>{trip.currency} {trip.total_estimated_cost.toLocaleString()}</strong>estimated total</span></div></div>
+      <section className="itinerary-section"><div className="itinerary-title"><div><span className="eyebrow">YOUR DAY-BY-DAY PLAN</span><h2>The journey, beautifully mapped.</h2></div><div className="day-jump"><label htmlFor="day-select">Jump to</label><select id="day-select" value={activeDay} onChange={(event) => setActiveDay(Number(event.target.value))}>{trip.itinerary.map((item) => <option value={item.day} key={item.day}>Day {item.day} · {formatDate(item.date)}</option>)}</select></div></div>
+        <div className="day-tabs-shell"><button className="day-arrow" disabled={dayIndex <= 0} onClick={() => moveDay(-1)} aria-label="Previous day">‹</button><div className="day-tabs" role="tablist">{trip.itinerary.map((item) => <button role="tab" aria-selected={activeDay === item.day} className={activeDay === item.day ? 'active' : ''} onClick={() => setActiveDay(item.day)} key={item.day}><small>DAY {item.day}</small><strong>{formatDate(item.date, { month: 'short', day: 'numeric' })}</strong><span>{item.activities.length} stops</span></button>)}</div><button className="day-arrow" disabled={dayIndex >= trip.itinerary.length - 1} onClick={() => moveDay(1)} aria-label="Next day">›</button></div>
+      </section>
+      {day && <div className="itinerary-layout"><section className="day-plan"><header className="day-plan-head"><div className="day-number">{String(day.day).padStart(2, '0')}</div><div className="day-title"><span>{formatDate(day.date, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</span><h2>{cleanText(day.title)}</h2><p>{cleanText(day.summary)}</p></div><button className="subtle-btn regenerate-btn" onClick={regenerate} disabled={regenerating === day.day}><RefreshCw className={regenerating ? 'spin' : ''}/>{regenerating ? 'Reimagining…' : 'Regenerate day'}</button></header>
         <div className="timeline">{day.activities.map((activity, index) => {
-          const item = categories[activity.category] || categories.sightseeing; const Icon = item.icon
-          return <article className="activity" key={`${activity.time}-${index}`}><div className="activity-time">{activity.time}</div><div className={`timeline-icon ${item.tone}`}><Icon/></div><div className="activity-card"><div className="activity-card-main"><span className="activity-category">{activity.category}</span><h3>{activity.title}</h3><p>{activity.description}</p><div className="activity-meta"><span><MapPin/> {activity.location}</span><span><Clock3/> {Math.floor(activity.duration_minutes / 60)}h {activity.duration_minutes % 60 || ''}m</span><span><CircleDollarSign/> ~{trip.currency} {activity.estimated_cost}</span></div></div><div className="activity-actions"><button aria-label="Edit activity" onClick={() => notify('Activity selected for editing')}><Edit3/></button><button aria-label="Remove activity" onClick={() => removeActivity(index)}><Trash2/></button></div></div></article>
+          const categoryKey = activity.category.split(/[|,/]/)[0].trim().toLowerCase(); const item = categories[categoryKey] || categories.sightseeing; const Icon = item.icon
+          const hours = Math.floor(activity.duration_minutes / 60); const minutes = activity.duration_minutes % 60
+          return <article className="activity" key={`${activity.time}-${index}`}><div className="activity-time">{activity.time}</div><div className={`timeline-icon ${item.tone}`}><Icon/></div><div className="activity-card"><div className="activity-card-main"><span className="activity-category">{categoryLabel(activity.category)}</span><h3>{cleanText(activity.title)}</h3><p>{cleanText(activity.description)}</p><div className="activity-meta"><span><MapPin/> {cleanText(activity.location)}</span><span><Clock3/> {hours ? `${hours}h` : ''} {minutes ? `${minutes}m` : ''}</span><span><CircleDollarSign/> {activity.estimated_cost ? `~${trip.currency} ${activity.estimated_cost.toLocaleString()}` : 'Included'}</span></div></div><div className="activity-actions"><button aria-label="Edit activity" onClick={() => notify('Activity selected for editing')}><Edit3/></button><button aria-label="Remove activity" onClick={() => removeActivity(index)}><Trash2/></button></div></div></article>
         })}</div>
         <button className="add-activity" onClick={() => notify('Add activity mode opened')}><Plus/>Add an activity</button>
-        <footer className="day-total"><span>Estimated day total</span><strong>{trip.currency} {day.daily_cost.toLocaleString()}</strong></footer>
-      </section>}
-      <section className="trip-tip"><span><Sparkles/></span><div><strong>A small note from Roamly</strong><p>Your schedule leaves a little breathing room each afternoon. Keep it—the best travel moments are often the ones you didn’t plan.</p></div></section>
+        <div className="next-day-row"><button disabled={dayIndex <= 0} onClick={() => moveDay(-1)}><ArrowLeft/>Previous</button><span>Day {day.day} of {trip.itinerary.length}</span><button disabled={dayIndex >= trip.itinerary.length - 1} onClick={() => moveDay(1)}>Next day<span>→</span></button></div>
+      </section><aside className="day-aside"><div className="day-aside-card"><span className="eyebrow">DAY AT A GLANCE</span><div className="aside-stat"><Clock3/><span><strong>{Math.floor(dayMinutes / 60)}h {dayMinutes % 60}m</strong>planned experiences</span></div><div className="aside-stat"><MapPin/><span><strong>{day.activities.length} stops</strong>thoughtfully sequenced</span></div><div className="aside-stat"><CircleDollarSign/><span><strong>{trip.currency} {day.daily_cost.toLocaleString()}</strong>estimated for the day</span></div><div className="day-budget"><span>Trip budget used</span><strong>{Math.min(100, Math.round((trip.total_estimated_cost / trip.budget) * 100))}%</strong><div><i style={{ width: `${Math.min(100, (trip.total_estimated_cost / trip.budget) * 100)}%` }}/></div></div></div><div className="trip-tip"><span><Sparkles/></span><div><strong>A note from Roamly</strong><p>Leave a little breathing room—the best travel moments are often the ones you didn’t plan.</p></div></div></aside></div>}
     </div>
   </div>
 }

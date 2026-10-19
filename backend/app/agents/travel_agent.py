@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from ..config import Settings
-from ..models import GeneratedItinerary, ItineraryDay, Trip
+from ..models import GeneratedItinerary, ItineraryDay, RegeneratedDay, Trip
 from ..prompts import SYSTEM_PROMPT, day_prompt, trip_prompt
 
 
@@ -24,7 +24,12 @@ class TravelAgent:
         self.settings = settings
 
     async def plan_trip(self, request) -> GeneratedItinerary:
-        content = await self._chat(SYSTEM_PROMPT, trip_prompt(request))
+        content = await self._chat(
+            SYSTEM_PROMPT,
+            trip_prompt(request),
+            schema_name="travel_itinerary",
+            schema=GeneratedItinerary.model_json_schema(),
+        )
         try:
             return GeneratedItinerary.model_validate(self._extract_json(content))
         except (ValidationError, json.JSONDecodeError, ValueError) as exc:
@@ -34,6 +39,8 @@ class TravelAgent:
         content = await self._chat(
             "You are the Roamly travel planning agent. Return only the requested valid JSON object, with no markdown or thinking trace.",
             day_prompt(trip, day_number),
+            schema_name="regenerated_day",
+            schema=RegeneratedDay.model_json_schema(),
         )
         try:
             data = self._extract_json(content)
@@ -41,7 +48,7 @@ class TravelAgent:
         except (ValidationError, json.JSONDecodeError, ValueError, KeyError) as exc:
             raise HTTPException(status_code=502, detail=f"The travel agent returned an invalid day plan: {exc}") from exc
 
-    async def _chat(self, system: str, user: str) -> str:
+    async def _chat(self, system: str, user: str, schema_name: str, schema: dict) -> str:
         if not self.settings.llm_configured:
             raise HTTPException(
                 status_code=503,
@@ -58,7 +65,10 @@ class TravelAgent:
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "temperature": 0.65,
             "max_tokens": 7000,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema},
+            },
         }
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
@@ -81,4 +91,3 @@ class TravelAgent:
         if start < 0 or end < start:
             raise ValueError("No JSON object found")
         return json.loads(cleaned[start : end + 1])
-

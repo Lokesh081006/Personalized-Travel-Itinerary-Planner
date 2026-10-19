@@ -30,7 +30,12 @@ class Settings(BaseSettings):
 
     @property
     def supabase_configured(self) -> bool:
-        return bool(self.supabase_url and self.supabase_key)
+        key = self.supabase_key
+        # Accept current project secret keys or legacy service_role JWTs only.
+        # Browser publishable keys and sbp_ account-management tokens cannot
+        # power this privileged Data API storage adapter.
+        valid_backend_key = key.startswith("sb_secret_") or key.startswith("eyJ")
+        return bool(self.supabase_url and valid_backend_key)
 
     @property
     def supabase_key(self) -> str:

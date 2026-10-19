@@ -11,6 +11,7 @@ Roamly is a full-stack travel planning application that turns dates, budget, gro
 - Dedicated `TravelAgent` with strict JSON-schema output validation
 - OpenAI-compatible support for LM Studio, llama.cpp, Ollama proxies, vLLM, and SGLang
 - Supabase persistence with automatic in-memory fallback
+- Browser-persisted profile and travel preferences (until user authentication is added)
 
 ## Architecture
 
@@ -237,4 +238,3 @@ Read `GET /v1/models` and copy the returned `id` exactly into `OPENAI_MODEL`.
 ### Supabase reports Row Level Security errors
 
 The backend received a publishable key. Replace it with **secret key (default)** from the project's API Keys page. Never put that secret in frontend code.
-

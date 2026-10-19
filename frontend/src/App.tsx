@@ -11,6 +11,18 @@ import type { HealthStatus } from './api'
 import type { GenerateTripInput, ItineraryDay, Trip } from './types'
 
 type View = 'dashboard' | 'builder' | 'trips' | 'settings' | 'trip'
+type UserPreferences = { displayName: string; homeAirport: string; currency: string; pace: string; notifications: boolean }
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  displayName: 'Lokesh', homeAirport: '', currency: 'INR', pace: 'Balanced', notifications: true,
+}
+
+function loadPreferences(): UserPreferences {
+  try {
+    const saved = window.localStorage.getItem('roamly_preferences')
+    return saved ? { ...DEFAULT_PREFERENCES, ...JSON.parse(saved) } : DEFAULT_PREFERENCES
+  } catch { return DEFAULT_PREFERENCES }
+}
 
 const categories: Record<string, { icon: typeof Compass; tone: string }> = {
   sightseeing: { icon: MapPin, tone: 'coral' },
@@ -78,6 +90,7 @@ function App() {
   const [sidebar, setSidebar] = useState(false)
   const [toast, setToast] = useState('')
   const [generationDestination, setGenerationDestination] = useState('')
+  const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences)
 
   useEffect(() => {
     api.listTrips().then((saved) => saved.length && setTrips(saved)).catch(() => undefined)
@@ -86,6 +99,11 @@ function App() {
   const navigate = (next: View) => { setView(next); setSidebar(false); window.scrollTo(0, 0) }
   const openTrip = (trip: Trip) => { setSelected(trip); navigate('trip') }
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2600) }
+  const savePreferences = (next: UserPreferences) => {
+    window.localStorage.setItem('roamly_preferences', JSON.stringify(next))
+    setPreferences(next)
+    notify('Preferences saved')
+  }
 
   const generate = async (input: GenerateTripInput) => {
     setGenerationDestination(input.destination); setLoading(true); setError('')
@@ -105,13 +123,13 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} navigate={navigate} tripCount={trips.length} open={sidebar} close={() => setSidebar(false)} />
+      <Sidebar view={view} navigate={navigate} tripCount={trips.length} preferences={preferences} open={sidebar} close={() => setSidebar(false)} />
       <main className="main-content">
         <MobileTopbar onMenu={() => setSidebar(true)} onCreate={() => navigate('builder')} />
-        {view === 'dashboard' && <Dashboard trips={trips} openTrip={openTrip} create={() => navigate('builder')} viewAll={() => navigate('trips')} />}
-        {view === 'builder' && <TripBuilder onGenerate={generate} loading={loading} error={error} back={() => navigate('dashboard')} />}
+        {view === 'dashboard' && <Dashboard trips={trips} preferences={preferences} openTrip={openTrip} create={() => navigate('builder')} viewAll={() => navigate('trips')} />}
+        {view === 'builder' && <TripBuilder preferences={preferences} onGenerate={generate} loading={loading} error={error} back={() => navigate('dashboard')} />}
         {view === 'trips' && <TripsPage trips={trips} openTrip={openTrip} create={() => navigate('builder')} />}
-        {view === 'settings' && <SettingsPage notify={notify} />}
+        {view === 'settings' && <SettingsPage preferences={preferences} onSave={savePreferences} />}
         {view === 'trip' && <TripView trip={selected} save={saveTrip} notify={notify} back={() => navigate('dashboard')} />}
       </main>
       {loading && <GenerationOverlay destination={generationDestination} />}
@@ -120,7 +138,8 @@ function App() {
   )
 }
 
-function Sidebar({ view, navigate, tripCount, open, close }: { view: View; navigate: (v: View) => void; tripCount: number; open: boolean; close: () => void }) {
+function Sidebar({ view, navigate, tripCount, preferences, open, close }: { view: View; navigate: (v: View) => void; tripCount: number; preferences: UserPreferences; open: boolean; close: () => void }) {
+  const initials = preferences.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'TR'
   return <>
     {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={close} />}
     <aside className={`sidebar ${open ? 'is-open' : ''}`}>
@@ -137,7 +156,7 @@ function Sidebar({ view, navigate, tripCount, open, close }: { view: View; navig
         <strong>Travel smarter</strong><p>Roamly learns your style every time you plan.</p>
       </div>
       <nav className="nav-list nav-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')}><Settings />Settings</button></nav>
-      <div className="profile"><div className="avatar">AK</div><div><strong>Alex Kumar</strong><span>Explorer plan</span></div><MoreHorizontal size={18} /></div>
+      <div className="profile"><div className="avatar">{initials}</div><div><strong>{preferences.displayName || 'Traveler'}</strong><span>Explorer plan</span></div><MoreHorizontal size={18} /></div>
     </aside>
   </>
 }
@@ -180,10 +199,11 @@ function GenerationOverlay({ destination }: { destination: string }) {
   </div>
 }
 
-function Dashboard({ trips, openTrip, create, viewAll }: { trips: Trip[]; openTrip: (t: Trip) => void; create: () => void; viewAll: () => void }) {
+function Dashboard({ trips, preferences, openTrip, create, viewAll }: { trips: Trip[]; preferences: UserPreferences; openTrip: (t: Trip) => void; create: () => void; viewAll: () => void }) {
   const next = trips[0] || demoTrip
+  const firstName = preferences.displayName.trim().split(/\s+/)[0] || 'traveler'
   return <div className="page dashboard-page">
-    <header className="page-header"><div><span className="eyebrow">MONDAY, OCTOBER 19</span><h1>Where to next, Alex?</h1><p>Pick up where you left off, or turn a new idea into a trip.</p></div><button className="primary-btn" onClick={create}><Plus size={18} />Plan a new trip</button></header>
+    <header className="page-header"><div><span className="eyebrow">MONDAY, OCTOBER 19</span><h1>Where to next, {firstName}?</h1><p>Pick up where you left off, or turn a new idea into a trip.</p></div><button className="primary-btn" onClick={create}><Plus size={18} />Plan a new trip</button></header>
     <section className="hero-trip" onClick={() => openTrip(next)}>
       <div className="hero-art"><div className="sun"/><div className="mountain mountain-back"/><div className="mountain mountain-front"/><div className="torii"><i/><i/><b/><em/></div><span className="cloud c1"/><span className="cloud c2"/></div>
       <div className="hero-copy"><span className="status-pill"><i/>UPCOMING</span><h2>{next.destination}, {next.country}</h2><p>{formatDate(next.start_date, { month: 'long', day: 'numeric' })} – {formatDate(next.end_date, { month: 'long', day: 'numeric', year: 'numeric' })} · {next.travelers} travelers</p><div className="hero-meta"><span><CalendarDays/> {next.itinerary.length || 5} days</span><span><CircleDollarSign/> {next.currency} {next.total_estimated_cost.toLocaleString()}</span><span><Sparkles/> AI planned</span></div><button className="text-btn">View itinerary <span>→</span></button></div>
@@ -218,12 +238,14 @@ function TripsPage({ trips, openTrip, create }: { trips: Trip[]; openTrip: (trip
   </div>
 }
 
-function SettingsPage({ notify }: { notify: (message: string) => void }) {
+function SettingsPage({ preferences, onSave }: { preferences: UserPreferences; onSave: (preferences: UserPreferences) => void }) {
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [healthError, setHealthError] = useState(false)
-  const [pace, setPace] = useState('Balanced')
-  const [currency, setCurrency] = useState('USD')
-  const [notifications, setNotifications] = useState(true)
+  const [displayName, setDisplayName] = useState(preferences.displayName)
+  const [homeAirport, setHomeAirport] = useState(preferences.homeAirport)
+  const [pace, setPace] = useState(preferences.pace)
+  const [currency, setCurrency] = useState(preferences.currency)
+  const [notifications, setNotifications] = useState(preferences.notifications)
 
   useEffect(() => {
     api.health().then((data) => { setHealth(data); setHealthError(false) }).catch(() => setHealthError(true))
@@ -232,10 +254,10 @@ function SettingsPage({ notify }: { notify: (message: string) => void }) {
   return <div className="page settings-page">
     <header className="page-header"><div><span className="eyebrow">PERSONALIZE ROAMLY</span><h1>Settings</h1><p>Manage your travel defaults and check connected services.</p></div></header>
     <div className="settings-layout"><div className="settings-main">
-      <section className="settings-card"><header><span><UserRound/></span><div><h2>Profile</h2><p>The details used to personalize your planning space.</p></div></header><div className="settings-fields"><label><span>Display name</span><input defaultValue="Alex Kumar"/></label><label><span>Home airport</span><input placeholder="e.g. DEL — New Delhi"/></label></div></section>
+      <section className="settings-card"><header><span><UserRound/></span><div><h2>Profile</h2><p>The details used to personalize your planning space.</p></div></header><div className="settings-fields"><label><span>Display name</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name"/></label><label><span>Home airport</span><input value={homeAirport} onChange={(event) => setHomeAirport(event.target.value)} placeholder="e.g. DEL — New Delhi"/></label></div></section>
       <section className="settings-card"><header><span><SlidersHorizontal/></span><div><h2>Travel defaults</h2><p>Pre-fill new trips with the choices you use most.</p></div></header><div className="settings-fields"><label><span>Preferred currency</span><select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option></select></label><label><span>Default pace</span><select value={pace} onChange={(event) => setPace(event.target.value)}><option>Relaxed</option><option>Balanced</option><option>Packed</option></select></label></div></section>
       <section className="settings-card"><header><span><Bell/></span><div><h2>Notifications</h2><p>Choose when Roamly should keep you updated.</p></div></header><label className="toggle-row"><span><strong>Trip reminders</strong><small>Get a reminder before an upcoming journey.</small></span><input type="checkbox" checked={notifications} onChange={(event) => setNotifications(event.target.checked)}/><i/></label></section>
-      <button className="primary-btn save-settings" onClick={() => notify('Preferences saved')}><Check/>Save preferences</button>
+      <button className="primary-btn save-settings" disabled={!displayName.trim()} onClick={() => onSave({ displayName: displayName.trim(), homeAirport: homeAirport.trim(), currency, pace, notifications })}><Check/>Save preferences</button>
     </div><aside className="connection-panel"><span className="eyebrow">SYSTEM STATUS</span><h2>Your connections</h2><p>Roamly checks these services through the secure backend.</p><div className="connection-list"><ConnectionStatus icon={Wifi} label="AI model" value={health?.model || 'Checking…'} good={Boolean(health?.ai_configured) && !healthError}/><ConnectionStatus icon={Database} label="Trip storage" value={health ? (health.storage === 'supabase' ? 'Supabase' : 'Temporary memory') : 'Checking…'} good={health?.storage === 'supabase' && !healthError}/><ConnectionStatus icon={ShieldCheck} label="FastAPI" value={healthError ? 'Unavailable' : health ? 'Connected' : 'Checking…'} good={Boolean(health) && !healthError}/></div>{healthError && <div className="connection-warning">Start the backend on port 8000 to view live status.</div>}</aside></div>
   </div>
 }
@@ -252,8 +274,8 @@ function TripCard({ trip, index, open }: { trip: Trip; index: number; open: () =
   return <button className="trip-card" onClick={open}><div className={`destination-art art-${index % 3}`}><span className="destination-badge">{trip.status || 'PLANNED'}</span><div className="art-orb"/><div className="art-hills"><i/><b/></div></div><div className="trip-card-copy"><span>{formatDate(trip.start_date, { month: 'short', year: 'numeric' }).toUpperCase()}</span><h3>{trip.destination}</h3><p>{trip.country} · {trip.itinerary.length} days · {trip.travelers} travelers</p><div><span>{trip.interests.slice(0, 2).join(' · ')}</span><span>→</span></div></div></button>
 }
 
-function TripBuilder({ onGenerate, loading, error, back }: { onGenerate: (f: GenerateTripInput) => void; loading: boolean; error: string; back: () => void }) {
-  const [form, setForm] = useState<GenerateTripInput>(emptyForm)
+function TripBuilder({ preferences, onGenerate, loading, error, back }: { preferences: UserPreferences; onGenerate: (f: GenerateTripInput) => void; loading: boolean; error: string; back: () => void }) {
+  const [form, setForm] = useState<GenerateTripInput>({ ...emptyForm, currency: preferences.currency, pace: preferences.pace })
   const [budgetInput, setBudgetInput] = useState(String(emptyForm.budget))
   const interests = ['Food', 'Culture', 'Nature', 'Adventure', 'Art', 'Shopping', 'Nightlife', 'Wellness']
   const update = <K extends keyof GenerateTripInput>(key: K, value: GenerateTripInput[K]) => setForm((old) => ({ ...old, [key]: value }))

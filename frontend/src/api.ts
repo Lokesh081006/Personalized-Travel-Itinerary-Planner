@@ -2,6 +2,13 @@ import type { GenerateTripInput, Trip } from './types'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 
+export type HealthStatus = {
+  status: string
+  ai_configured: boolean
+  storage: 'supabase' | 'memory'
+  model: string
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -15,6 +22,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  health: () => request<HealthStatus>('/api/health'),
   listTrips: () => request<Trip[]>('/api/trips'),
   generateTrip: (input: GenerateTripInput) => request<Trip>('/api/trips/generate', { method: 'POST', body: JSON.stringify(input) }),
   updateTrip: (trip: Trip) => request<Trip>(`/api/trips/${trip.id}`, { method: 'PUT', body: JSON.stringify(trip) }),

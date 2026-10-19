@@ -4,11 +4,13 @@ import {
   BrainCircuit, CheckCircle2, Compass, Edit3, Heart, Hotel, LayoutDashboard, LoaderCircle, MapPin,
   Menu, MoreHorizontal, Navigation, Plus, RefreshCw, Search, Settings,
   Sparkles, Trash2, Users, Utensils, WandSparkles, X, Route, Plane,
+  Bell, Database, ShieldCheck, SlidersHorizontal, UserRound, Wifi,
 } from 'lucide-react'
 import { api } from './api'
+import type { HealthStatus } from './api'
 import type { GenerateTripInput, ItineraryDay, Trip } from './types'
 
-type View = 'dashboard' | 'builder' | 'trip'
+type View = 'dashboard' | 'builder' | 'trips' | 'settings' | 'trip'
 
 const categories: Record<string, { icon: typeof Compass; tone: string }> = {
   sightseeing: { icon: MapPin, tone: 'coral' },
@@ -103,11 +105,13 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} navigate={navigate} open={sidebar} close={() => setSidebar(false)} />
+      <Sidebar view={view} navigate={navigate} tripCount={trips.length} open={sidebar} close={() => setSidebar(false)} />
       <main className="main-content">
         <MobileTopbar onMenu={() => setSidebar(true)} onCreate={() => navigate('builder')} />
-        {view === 'dashboard' && <Dashboard trips={trips} openTrip={openTrip} create={() => navigate('builder')} />}
+        {view === 'dashboard' && <Dashboard trips={trips} openTrip={openTrip} create={() => navigate('builder')} viewAll={() => navigate('trips')} />}
         {view === 'builder' && <TripBuilder onGenerate={generate} loading={loading} error={error} back={() => navigate('dashboard')} />}
+        {view === 'trips' && <TripsPage trips={trips} openTrip={openTrip} create={() => navigate('builder')} />}
+        {view === 'settings' && <SettingsPage notify={notify} />}
         {view === 'trip' && <TripView trip={selected} save={saveTrip} notify={notify} back={() => navigate('dashboard')} />}
       </main>
       {loading && <GenerationOverlay destination={generationDestination} />}
@@ -116,7 +120,7 @@ function App() {
   )
 }
 
-function Sidebar({ view, navigate, open, close }: { view: View; navigate: (v: View) => void; open: boolean; close: () => void }) {
+function Sidebar({ view, navigate, tripCount, open, close }: { view: View; navigate: (v: View) => void; tripCount: number; open: boolean; close: () => void }) {
   return <>
     {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={close} />}
     <aside className={`sidebar ${open ? 'is-open' : ''}`}>
@@ -124,7 +128,7 @@ function Sidebar({ view, navigate, open, close }: { view: View; navigate: (v: Vi
       <nav className="nav-list">
         <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><LayoutDashboard />Overview</button>
         <button className={view === 'builder' ? 'active' : ''} onClick={() => navigate('builder')}><WandSparkles />Plan a trip</button>
-        <button><MapPin />My trips<span className="nav-count">3</span></button>
+        <button className={view === 'trips' || view === 'trip' ? 'active' : ''} onClick={() => navigate('trips')}><MapPin />My trips<span className="nav-count">{tripCount}</span></button>
         <button><Heart />Saved places</button>
       </nav>
       <div className="sidebar-spacer" />
@@ -132,7 +136,7 @@ function Sidebar({ view, navigate, open, close }: { view: View; navigate: (v: Vi
         <span className="insight-icon"><Sparkles size={16} /></span>
         <strong>Travel smarter</strong><p>Roamly learns your style every time you plan.</p>
       </div>
-      <nav className="nav-list nav-bottom"><button><Settings />Settings</button></nav>
+      <nav className="nav-list nav-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')}><Settings />Settings</button></nav>
       <div className="profile"><div className="avatar">AK</div><div><strong>Alex Kumar</strong><span>Explorer plan</span></div><MoreHorizontal size={18} /></div>
     </aside>
   </>
@@ -176,7 +180,7 @@ function GenerationOverlay({ destination }: { destination: string }) {
   </div>
 }
 
-function Dashboard({ trips, openTrip, create }: { trips: Trip[]; openTrip: (t: Trip) => void; create: () => void }) {
+function Dashboard({ trips, openTrip, create, viewAll }: { trips: Trip[]; openTrip: (t: Trip) => void; create: () => void; viewAll: () => void }) {
   const next = trips[0] || demoTrip
   return <div className="page dashboard-page">
     <header className="page-header"><div><span className="eyebrow">MONDAY, OCTOBER 19</span><h1>Where to next, Alex?</h1><p>Pick up where you left off, or turn a new idea into a trip.</p></div><button className="primary-btn" onClick={create}><Plus size={18} />Plan a new trip</button></header>
@@ -189,7 +193,7 @@ function Dashboard({ trips, openTrip, create }: { trips: Trip[]; openTrip: (t: T
       <Metric label="Places saved" value="38" note="Across 9 cities" icon={Heart} tone="coral" />
       <Metric label="Hours saved" value="24+" note="With AI planning" icon={Clock3} tone="blue" />
     </section>
-    <section className="section-block"><div className="section-heading"><div><h2>Your trips</h2><p>Plans, memories, and places still to come.</p></div><button className="subtle-btn">View all <span>→</span></button></div>
+    <section className="section-block"><div className="section-heading"><div><h2>Your trips</h2><p>Plans, memories, and places still to come.</p></div><button className="subtle-btn" onClick={viewAll}>View all <span>→</span></button></div>
       <div className="trip-grid">
         {trips.slice(0, 3).map((trip, index) => <TripCard key={trip.id} trip={trip} index={index} open={() => openTrip(trip)} />)}
         {trips.length < 3 && <button className="new-trip-card" onClick={create}><span><Plus /></span><strong>Dream up a new trip</strong><small>Tell us where you want to go</small></button>}
@@ -197,6 +201,47 @@ function Dashboard({ trips, openTrip, create }: { trips: Trip[]; openTrip: (t: T
     </section>
     <section className="inspiration"><div><span className="eyebrow">A LITTLE INSPIRATION</span><h2>Your kind of places</h2><p>Curated around your love for food, culture, and slow travel.</p></div><div className="chips"><span>Coastal towns</span><span>Food capitals</span><span>Hidden temples</span><span>Scenic rail</span></div></section>
   </div>
+}
+
+function TripsPage({ trips, openTrip, create }: { trips: Trip[]; openTrip: (trip: Trip) => void; create: () => void }) {
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all')
+  const visible = trips.filter((trip) => {
+    const matchesQuery = `${trip.destination} ${trip.country}`.toLowerCase().includes(query.toLowerCase())
+    const isPast = new Date(`${trip.end_date}T23:59:59`) < new Date()
+    return matchesQuery && (filter === 'all' || (filter === 'past' ? isPast : !isPast))
+  })
+  return <div className="page library-page">
+    <header className="page-header library-header"><div><span className="eyebrow">YOUR TRAVEL LIBRARY</span><h1>Every journey, in one place.</h1><p>Revisit a plan, continue refining it, or begin somewhere new.</p></div><button className="primary-btn" onClick={create}><Plus/>Plan a new trip</button></header>
+    <div className="library-toolbar"><label className="search-box"><Search/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search destinations"/></label><div className="filter-pills">{(['all','upcoming','past'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item}</button>)}</div><span className="result-count">{visible.length} {visible.length === 1 ? 'trip' : 'trips'}</span></div>
+    {visible.length ? <div className="trip-grid library-grid">{visible.map((trip, index) => <TripCard key={trip.id} trip={trip} index={index} open={() => openTrip(trip)} />)}</div> : <div className="empty-state"><span><Compass/></span><h2>No trips found</h2><p>Try another search, or start planning your next adventure.</p><button className="primary-btn" onClick={create}><Plus/>Plan a trip</button></div>}
+  </div>
+}
+
+function SettingsPage({ notify }: { notify: (message: string) => void }) {
+  const [health, setHealth] = useState<HealthStatus | null>(null)
+  const [healthError, setHealthError] = useState(false)
+  const [pace, setPace] = useState('Balanced')
+  const [currency, setCurrency] = useState('USD')
+  const [notifications, setNotifications] = useState(true)
+
+  useEffect(() => {
+    api.health().then((data) => { setHealth(data); setHealthError(false) }).catch(() => setHealthError(true))
+  }, [])
+
+  return <div className="page settings-page">
+    <header className="page-header"><div><span className="eyebrow">PERSONALIZE ROAMLY</span><h1>Settings</h1><p>Manage your travel defaults and check connected services.</p></div></header>
+    <div className="settings-layout"><div className="settings-main">
+      <section className="settings-card"><header><span><UserRound/></span><div><h2>Profile</h2><p>The details used to personalize your planning space.</p></div></header><div className="settings-fields"><label><span>Display name</span><input defaultValue="Alex Kumar"/></label><label><span>Home airport</span><input placeholder="e.g. DEL — New Delhi"/></label></div></section>
+      <section className="settings-card"><header><span><SlidersHorizontal/></span><div><h2>Travel defaults</h2><p>Pre-fill new trips with the choices you use most.</p></div></header><div className="settings-fields"><label><span>Preferred currency</span><select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option></select></label><label><span>Default pace</span><select value={pace} onChange={(event) => setPace(event.target.value)}><option>Relaxed</option><option>Balanced</option><option>Packed</option></select></label></div></section>
+      <section className="settings-card"><header><span><Bell/></span><div><h2>Notifications</h2><p>Choose when Roamly should keep you updated.</p></div></header><label className="toggle-row"><span><strong>Trip reminders</strong><small>Get a reminder before an upcoming journey.</small></span><input type="checkbox" checked={notifications} onChange={(event) => setNotifications(event.target.checked)}/><i/></label></section>
+      <button className="primary-btn save-settings" onClick={() => notify('Preferences saved')}><Check/>Save preferences</button>
+    </div><aside className="connection-panel"><span className="eyebrow">SYSTEM STATUS</span><h2>Your connections</h2><p>Roamly checks these services through the secure backend.</p><div className="connection-list"><ConnectionStatus icon={Wifi} label="AI model" value={health?.model || 'Checking…'} good={Boolean(health?.ai_configured) && !healthError}/><ConnectionStatus icon={Database} label="Trip storage" value={health ? (health.storage === 'supabase' ? 'Supabase' : 'Temporary memory') : 'Checking…'} good={health?.storage === 'supabase' && !healthError}/><ConnectionStatus icon={ShieldCheck} label="FastAPI" value={healthError ? 'Unavailable' : health ? 'Connected' : 'Checking…'} good={Boolean(health) && !healthError}/></div>{healthError && <div className="connection-warning">Start the backend on port 8000 to view live status.</div>}</aside></div>
+  </div>
+}
+
+function ConnectionStatus({ icon: Icon, label, value, good }: { icon: typeof Compass; label: string; value: string; good: boolean }) {
+  return <div className="connection-item"><span className={good ? 'connected' : ''}><Icon/></span><div><small>{label}</small><strong>{value}</strong></div><i className={good ? 'good' : ''}/></div>
 }
 
 function Metric({ label, value, note, icon: Icon, tone }: { label: string; value: string; note: string; icon: typeof Compass; tone: string }) {
@@ -209,6 +254,7 @@ function TripCard({ trip, index, open }: { trip: Trip; index: number; open: () =
 
 function TripBuilder({ onGenerate, loading, error, back }: { onGenerate: (f: GenerateTripInput) => void; loading: boolean; error: string; back: () => void }) {
   const [form, setForm] = useState<GenerateTripInput>(emptyForm)
+  const [budgetInput, setBudgetInput] = useState(String(emptyForm.budget))
   const interests = ['Food', 'Culture', 'Nature', 'Adventure', 'Art', 'Shopping', 'Nightlife', 'Wellness']
   const update = <K extends keyof GenerateTripInput>(key: K, value: GenerateTripInput[K]) => setForm((old) => ({ ...old, [key]: value }))
   const toggle = (interest: string) => update('interests', form.interests.includes(interest) ? form.interests.filter((i) => i !== interest) : [...form.interests, interest])
@@ -223,7 +269,7 @@ function TripBuilder({ onGenerate, loading, error, back }: { onGenerate: (f: Gen
           <label className="field"><span>Start date</span><div className="input-wrap"><CalendarDays/><input type="date" value={form.start_date} onChange={(e) => update('start_date', e.target.value)} required /></div></label>
           <label className="field"><span>End date</span><div className="input-wrap"><CalendarDays/><input type="date" min={form.start_date} value={form.end_date} onChange={(e) => update('end_date', e.target.value)} required /></div></label>
           <label className="field"><span>Travelers</span><div className="input-wrap"><Users/><input type="number" min="1" max="20" value={form.travelers} onChange={(e) => update('travelers', Number(e.target.value))} /></div></label>
-          <label className="field"><span>Total budget</span><div className="input-wrap"><CircleDollarSign/><input type="number" min="100" step="100" value={form.budget} onChange={(e) => update('budget', Number(e.target.value))} /><select value={form.currency} onChange={(e) => update('currency', e.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option></select></div></label>
+          <label className="field"><span>Total budget</span><div className="input-wrap budget-input"><CircleDollarSign/><input type="number" min="100" step="100" inputMode="numeric" placeholder="Enter amount" value={budgetInput} onChange={(e) => { const value = e.target.value; setBudgetInput(value); update('budget', value === '' ? 0 : Number(value)) }} /><select aria-label="Currency" value={form.currency} onChange={(e) => update('currency', e.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option></select></div></label>
         </FormSection>
         <FormSection number="02" title="Your travel rhythm" subtitle="Make the plan feel like you.">
           <div className="field field-full"><span>What are you into?</span><div className="interest-grid">{interests.map((interest) => <button type="button" key={interest} className={form.interests.includes(interest) ? 'selected' : ''} onClick={() => toggle(interest)}>{form.interests.includes(interest) && <Check/>}{interest}</button>)}</div></div>

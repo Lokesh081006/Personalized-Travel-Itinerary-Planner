@@ -46,6 +46,8 @@ const categoryLabel = (value: string) => value
   .replace(/[_-]/g, ' ')
   .replace(/\b\w/g, (letter) => letter.toUpperCase())
 
+const currencySymbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥' }
+
 const demoTrip: Trip = {
   id: 'demo-kyoto', destination: 'Kyoto', country: 'Japan', start_date: '2026-11-12', end_date: '2026-11-16',
   travelers: 2, budget: 2400, currency: 'USD', interests: ['Culture', 'Food', 'Nature'], pace: 'Balanced',
@@ -276,11 +278,12 @@ function TripCard({ trip, index, open }: { trip: Trip; index: number; open: () =
 
 function TripBuilder({ preferences, onGenerate, loading, error, back }: { preferences: UserPreferences; onGenerate: (f: GenerateTripInput) => void; loading: boolean; error: string; back: () => void }) {
   const [form, setForm] = useState<GenerateTripInput>({ ...emptyForm, currency: preferences.currency, pace: preferences.pace })
+  const [travelerInput, setTravelerInput] = useState(String(emptyForm.travelers))
   const [budgetInput, setBudgetInput] = useState(String(emptyForm.budget))
   const interests = ['Food', 'Culture', 'Nature', 'Adventure', 'Art', 'Shopping', 'Nightlife', 'Wellness']
   const update = <K extends keyof GenerateTripInput>(key: K, value: GenerateTripInput[K]) => setForm((old) => ({ ...old, [key]: value }))
   const toggle = (interest: string) => update('interests', form.interests.includes(interest) ? form.interests.filter((i) => i !== interest) : [...form.interests, interest])
-  const canGenerate = form.destination && form.start_date && form.end_date && form.budget > 0
+  const canGenerate = form.destination && form.start_date && form.end_date && form.travelers > 0 && form.budget > 0
   return <div className="page builder-page">
     <button className="back-link" onClick={back}><ArrowLeft />Back to overview</button>
     <div className="builder-intro"><span className="eyebrow"><Sparkles size={13}/> AI TRIP BUILDER</span><h1>Let’s shape your next escape.</h1><p>Give us the essentials. We’ll connect the dots into a trip that feels unmistakably yours.</p></div>
@@ -290,8 +293,8 @@ function TripBuilder({ preferences, onGenerate, loading, error, back }: { prefer
           <label className="field field-full"><span>Destination</span><div className="input-wrap"><MapPin/><input placeholder="e.g. Kyoto, Japan" value={form.destination} onChange={(e) => update('destination', e.target.value)} required /></div></label>
           <label className="field"><span>Start date</span><div className="input-wrap"><CalendarDays/><input type="date" value={form.start_date} onChange={(e) => update('start_date', e.target.value)} required /></div></label>
           <label className="field"><span>End date</span><div className="input-wrap"><CalendarDays/><input type="date" min={form.start_date} value={form.end_date} onChange={(e) => update('end_date', e.target.value)} required /></div></label>
-          <label className="field"><span>Travelers</span><div className="input-wrap"><Users/><input type="number" min="1" max="20" value={form.travelers} onChange={(e) => update('travelers', Number(e.target.value))} /></div></label>
-          <label className="field"><span>Total budget</span><div className="input-wrap budget-input"><CircleDollarSign/><input type="number" min="100" step="100" inputMode="numeric" placeholder="Enter amount" value={budgetInput} onChange={(e) => { const value = e.target.value; setBudgetInput(value); update('budget', value === '' ? 0 : Number(value)) }} /><select aria-label="Currency" value={form.currency} onChange={(e) => update('currency', e.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option></select></div></label>
+          <label className="field"><span>Travelers</span><div className="input-wrap"><Users/><input type="number" min="1" max="20" inputMode="numeric" placeholder="Number of people" value={travelerInput} onChange={(e) => { const value = e.target.value; setTravelerInput(value); update('travelers', value === '' ? 0 : Number(value)) }} /></div></label>
+          <label className="field"><span>Total budget</span><div className="input-wrap budget-input"><span className="currency-symbol" aria-hidden="true">{currencySymbols[form.currency] || form.currency}</span><input type="number" min="100" step="100" inputMode="numeric" placeholder="Enter amount" value={budgetInput} onChange={(e) => { const value = e.target.value; setBudgetInput(value); update('budget', value === '' ? 0 : Number(value)) }} /><select aria-label="Currency" value={form.currency} onChange={(e) => update('currency', e.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option></select></div></label>
         </FormSection>
         <FormSection number="02" title="Your travel rhythm" subtitle="Make the plan feel like you.">
           <div className="field field-full"><span>What are you into?</span><div className="interest-grid">{interests.map((interest) => <button type="button" key={interest} className={form.interests.includes(interest) ? 'selected' : ''} onClick={() => toggle(interest)}>{form.interests.includes(interest) && <Check/>}{interest}</button>)}</div></div>
@@ -303,7 +306,7 @@ function TripBuilder({ preferences, onGenerate, loading, error, back }: { prefer
         <button className="generate-btn" type="submit" disabled={!canGenerate || loading}>{loading ? <><LoaderCircle className="spin"/>Designing your trip…</> : <><Sparkles/>Generate my itinerary<span>→</span></>}</button>
         <p className="fine-print">You can edit every detail after your itinerary is generated.</p>
       </form>
-      <aside className="builder-preview"><span className="eyebrow">YOUR TRIP AT A GLANCE</span><div className="preview-map"><div className="map-route"/><MapPin/><span>{form.destination || 'Your destination'}</span></div><h3>{form.destination || 'A new adventure'}</h3><p>{form.start_date && form.end_date ? `${formatDate(form.start_date)} – ${formatDate(form.end_date)}` : 'Choose your travel dates'}</p><div className="preview-facts"><span><Users/> {form.travelers} {form.travelers === 1 ? 'traveler' : 'travelers'}</span><span><CircleDollarSign/> {form.currency} {form.budget.toLocaleString()}</span><span><Compass/> {form.pace} pace</span></div><div className="preview-interests">{form.interests.map((i) => <span key={i}>{i}</span>)}</div><div className="ai-note"><Sparkles/><p><strong>Built around you</strong>Roamly balances travel time, cost, and your interests—then leaves space for discovery.</p></div></aside>
+      <aside className="builder-preview"><span className="eyebrow">YOUR TRIP AT A GLANCE</span><div className="preview-map"><div className="map-route"/><MapPin/><span>{form.destination || 'Your destination'}</span></div><h3>{form.destination || 'A new adventure'}</h3><p>{form.start_date && form.end_date ? `${formatDate(form.start_date)} – ${formatDate(form.end_date)}` : 'Choose your travel dates'}</p><div className="preview-facts"><span><Users/> {form.travelers || '—'} {form.travelers === 1 ? 'traveler' : 'travelers'}</span><span><strong className="preview-currency">{currencySymbols[form.currency] || form.currency}</strong> {form.budget ? form.budget.toLocaleString() : '—'}</span><span><Compass/> {form.pace} pace</span></div><div className="preview-interests">{form.interests.map((i) => <span key={i}>{i}</span>)}</div><div className="ai-note"><Sparkles/><p><strong>Built around you</strong>Roamly balances travel time, cost, and your interests—then leaves space for discovery.</p></div></aside>
     </div>
   </div>
 }

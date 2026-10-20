@@ -124,6 +124,16 @@ function App() {
     setSelected(trip); setTrips((items) => items.map((item) => item.id === trip.id ? trip : item))
     try { await api.updateTrip(trip); notify('Changes saved') } catch { notify('Saved in this session') }
   }
+  const deleteTrip = async (trip: Trip) => {
+    if (!window.confirm(`Remove ${trip.destination} from My trips? This cannot be undone.`)) return
+    try {
+      if (!trip.id.startsWith('demo-')) await api.deleteTrip(trip.id)
+      setTrips((items) => items.filter((item) => item.id !== trip.id))
+      notify(`${trip.destination} removed`)
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not remove this trip')
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -132,7 +142,7 @@ function App() {
         <MobileTopbar onMenu={() => setSidebar(true)} onCreate={() => navigate('builder')} />
         {view === 'dashboard' && <Dashboard trips={trips} preferences={preferences} openTrip={openTrip} create={() => navigate('builder')} viewAll={() => navigate('trips')} />}
         {view === 'builder' && <TripBuilder preferences={preferences} onGenerate={generate} loading={loading} error={error} back={() => navigate('dashboard')} />}
-        {view === 'trips' && <TripsPage trips={trips} openTrip={openTrip} create={() => navigate('builder')} />}
+        {view === 'trips' && <TripsPage trips={trips} openTrip={openTrip} deleteTrip={deleteTrip} create={() => navigate('builder')} />}
         {view === 'settings' && <SettingsPage preferences={preferences} onSave={savePreferences} />}
         {view === 'trip' && <TripView trip={selected} save={saveTrip} notify={notify} back={() => navigate('dashboard')} />}
       </main>
@@ -227,7 +237,7 @@ function Dashboard({ trips, preferences, openTrip, create, viewAll }: { trips: T
   </div>
 }
 
-function TripsPage({ trips, openTrip, create }: { trips: Trip[]; openTrip: (trip: Trip) => void; create: () => void }) {
+function TripsPage({ trips, openTrip, deleteTrip, create }: { trips: Trip[]; openTrip: (trip: Trip) => void; deleteTrip: (trip: Trip) => Promise<void>; create: () => void }) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all')
   const visible = trips.filter((trip) => {
@@ -238,7 +248,7 @@ function TripsPage({ trips, openTrip, create }: { trips: Trip[]; openTrip: (trip
   return <div className="page library-page">
     <header className="page-header library-header"><div><span className="eyebrow">YOUR TRAVEL LIBRARY</span><h1>Every journey, in one place.</h1><p>Revisit a plan, continue refining it, or begin somewhere new.</p></div><button className="primary-btn" onClick={create}><Plus/>Plan a new trip</button></header>
     <div className="library-toolbar"><label className="search-box"><Search/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search destinations"/></label><div className="filter-pills">{(['all','upcoming','past'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item}</button>)}</div><span className="result-count">{visible.length} {visible.length === 1 ? 'trip' : 'trips'}</span></div>
-    {visible.length ? <div className="trip-grid library-grid">{visible.map((trip, index) => <TripCard key={trip.id} trip={trip} index={index} open={() => openTrip(trip)} />)}</div> : <div className="empty-state"><span><Compass/></span><h2>No trips found</h2><p>Try another search, or start planning your next adventure.</p><button className="primary-btn" onClick={create}><Plus/>Plan a trip</button></div>}
+    {visible.length ? <div className="trip-grid library-grid">{visible.map((trip, index) => <div className="library-trip-wrap" key={trip.id}><TripCard trip={trip} index={index} open={() => openTrip(trip)} /><button className="remove-trip-btn" onClick={() => void deleteTrip(trip)} aria-label={`Remove ${trip.destination}`} title="Remove trip"><Trash2/></button></div>)}</div> : <div className="empty-state"><span><Compass/></span><h2>No trips found</h2><p>Try another search, or start planning your next adventure.</p><button className="primary-btn" onClick={create}><Plus/>Plan a trip</button></div>}
   </div>
 }
 

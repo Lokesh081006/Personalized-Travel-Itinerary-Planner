@@ -18,6 +18,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await response.json().catch(() => ({}))
     throw new Error(body.detail || 'Something went wrong. Please try again.')
   }
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
